@@ -16,8 +16,9 @@ logging.basicConfig(level=logging.INFO)
 freq = 100e6
 
 def pipe(data: bytes) -> bool:
-    iq = np.frombuffer(data, dtype=np.int8).astype(np.float32)
-    
+    print(type(data))
+    iq = np.frombuffer(data, dtype=np.int8)#.astype(np.float32)
+    print(type(iq[0]))
     if len(iq) % 2 != 0:
         return False
     
@@ -31,28 +32,27 @@ def pipe(data: bytes) -> bool:
     dBm = 10 * np.log10(strength) + reference_power_dBm
     
     print(f"dBm: {dBm}")
-    
+
     return False
 
-# receiver = Receiver(
-#     receiver_type="hackrf",   # "hackrf" / "rtl-sdr" / "auto"
-#     lna=20,                 # Only for HackRF
-#     vga=30,
-#     amp=True
-# )
+receiver = Receiver(
+    receiver_type="hackrf",   # "hackrf" / "rtl-sdr" / "auto"
+    lna=10,                 # Only for HackRF
+    vga=15,
+    amp=True,
+    freq=freq,            
+    bw=20e6,                 
+    samples_num=5016,       # or use pipe=process_samples
+    pipe=pipe
+)
 
-# receiver.configure(
-#     freq=freq,            
-#     bw=20e6,                 
-#     samples_num=5016,       # or use pipe=process_samples
-#     pipe=pipe
-# )
 
-# receiver.receive_stream()
-# time.sleep(1)
-# receiver.stop()
+receiver.receive_stream()
+time.sleep(1)
+receiver.stop()
 
-# samples = receiver.receive_samples()
+samples = receiver.receive_samples()
+print(type(samples[0]))
 
 # psd(samples, NFFT=1024, Fs=20e6/1e6, Fc=freq/1e6)
 # xlabel('Frequency (MHz)')
@@ -67,10 +67,12 @@ file = BasebandFileReader("/home/alex/.config/sdrpp/recordings/baseband_13780500
 # time.sleep(1)
 # file.stop()
 
-samples = file.receive_samples(100*1024)
+samples = file.receive_samples()
+print(type(samples[0]))
 print(samples)
 iq = samples[:, 0] + 1j * samples[:, 1]
+print(type(iq[0]))
 print(iq)
-psd(iq, NFFT=1024, Fs=20e6/1e6, Fc=137.805)
-show()
+# psd(iq, NFFT=1024, Fs=20e6/1e6, Fc=137.805)
+# show()
 

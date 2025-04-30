@@ -63,21 +63,23 @@ def pipe_old(data: bytes) -> bool:
 # show()
 
 
-file = BasebandFileReader(filename="/home/alex/.config/sdrpp/recordings/baseband_137805000Hz_20-14-26_30-03-2025.wav")
+file = BasebandFileReader(filename="/home/alex/.config/sdrpp/recordings/baseband_137805000Hz_18-38-26_30-03-2025.wav")
 
 print(f"File samplerate: {file.sample_rate/1e6} MHz")
+print(f"Shape: {file._data.shape}, type: {file._data.dtype}")
+print(f"Duration: {file._data.shape[0] / file.sample_rate:.2f} seconds")
 
-audio = StreamAudioSink(48000)
+audio = FileAudioSink("sounds/demodulated.wav")
 
 builder = RadioPipelineBuilder()
 #builder.add_step(BytesToComplex(data_type=np.int16, normalize=True))
-builder.add_step(BytesToComplex(data_type=np.int16, normalize=True))
+builder.add_step(WavToComplex(normalize=True))
 builder.add_step(FrequencyShift(-180000, file.sample_rate))
 builder.add_step(LowPassFilterIIR(20000, file.sample_rate))
-builder.add_step(AutoDecimator(file.sample_rate, 48000))
 builder.add_step(FMQuadratureDemod())
+builder.add_step(AutoDecimator(file.sample_rate, 48000))
 builder.add_step(AudioNormalize())
-builder.add_step(BandPassFilterFIR(2000, 2800, 48000))
+builder.add_step(BandPassFilterFIR(300, 5000, 48000))
 builder.add_step(audio)
 pipe_apt = builder.build()
 
@@ -90,7 +92,7 @@ def pipe_apt_full(data):
 file.receive_stream(pipe_apt_full, 1024*20)
 # time.sleep(1)
 # file.stop(
-# pipe_apt_full(file.data)
+#pipe_apt_full(file.data)
 audio.flush()
 # samples = file.receive_samples(1024*1000)
 

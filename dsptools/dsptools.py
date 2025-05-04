@@ -2,7 +2,7 @@ import numpy as np
 import scipy.signal
 from scipy.signal import *
 from abc import ABC, abstractmethod
-from apt_decoder import APT
+from apt_tools.apt_decoder import APT
 import sounddevice as sd
 import logging
 import wave
@@ -266,7 +266,8 @@ class DecoderAPT(APT):
         if self._in is None:
             all_signal = np.concatenate(self._signal)
             truncate = self.RATE * int(len(all_signal)//self.RATE)
-            all_signal = all_signal[:truncate]
+            if truncate > 0:
+                all_signal = all_signal[:truncate]
             return super().decode(signal=all_signal, outfile=outfile, imgshow=imgshow)
         return super().decode(outfile=outfile, imgshow=imgshow)
 

@@ -163,6 +163,10 @@ class Receiver:
         
         self.device.set_gain(self.lna, self.vga, self.amp)
 
+    @property
+    def sample_rate(self):
+        return self.bw
+
     def set_gain(self, lna=None, vga=None, amp=None):
         if lna is None:
             lna = self.lna
@@ -199,7 +203,7 @@ class Receiver:
         if self.freq is None or self.bw is None:
             raise ValueError("freq and bw must be set before receiving")
 
-        if samples_num is 0:
+        if samples_num == 0:
             samples_num = self.samples_num
 
         return self.device.receive_samples(

@@ -66,7 +66,10 @@ class APT(object):
         reshaped = filtered.reshape(len(filtered) // 5, 5)
         digitized = self._digitize(reshaped[:, 2])
         matrix = self._reshape(digitized)
-        image = PIL.Image.fromarray(matrix)
+
+        if matrix.dtype != numpy.uint8:
+            matrix = (numpy.clip(matrix, 0, 1) * 255).astype(numpy.uint8)
+        image = Image.fromarray(matrix)
         if not outfile is None:
             image.save(outfile)
         if imgshow: 
@@ -135,4 +138,4 @@ if __name__ == '__main__':
         outfile = sys.argv[2]
     else:
         outfile = None
-    apt.decode(outfile, imgshow=True)
+    apt.decode(outfile=outfile, imgshow=True)

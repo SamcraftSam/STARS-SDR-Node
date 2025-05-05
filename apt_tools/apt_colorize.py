@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 
 class APTColorizer2D:
     def __init__(self, lut_path="palettes/noaa-apt-daylight.png"):
+        script_dir = os.path.dirname(__file__)
+        lut_path = os.path.join(script_dir, lut_path)
         self.lut = self._load_lut(lut_path)
 
     def _load_lut(self, path):

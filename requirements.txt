@@ -1,0 +1,6 @@
+PIL
+matplotlib
+numpy
+pytest
+scipy
+sounddevice

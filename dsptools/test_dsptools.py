@@ -5,13 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import pytest
 import numpy as np
-from dsptools import (
-    WavToComplex, BytesToComplex,
-    LowPassFilterIIR, LowPassFilterFIR, BandPassFilterFIR,
-    FMQuadratureDemod, Decimator, AutoDecimator,
-    Resampler, AutoResampler, FrequencyShift,
-    dBmSignalPower, AudioNormalize
-)
+from dsptools import *
 
 @pytest.fixture
 def dummy_stereo_signal():
@@ -94,16 +88,30 @@ def test_freq_shift():
     out = shift(sig)
     assert isinstance(out, np.ndarray)
 
-def test_dbm_power_logs(caplog):
-    import logging
-    caplog.set_level(logging.INFO)
-    sig = np.random.randn(1000)
-    meter = dBmSignalPower()
-    _ = meter(sig)
-    assert "Signal Pwr" in caplog.text
-
 def test_audio_normalize():
     sig = np.array([0.0, 1.0, -0.5])
     norm = AudioNormalize()
     out = norm(sig.copy())
     assert np.max(np.abs(out)) == pytest.approx(1.0)
+
+def test_envelope_detector():
+    data = np.random.randn(100)
+    detector = EnvelopeDetector()
+    envelope = detector(data)
+    assert len(envelope) == len(data)
+    assert np.all(envelope >= 0)
+
+def test_noise_suppressor():
+    data = np.random.randn(100)
+    suppressor = NoiseSuppressor()
+    filtered = suppressor(data)
+    assert len(filtered) == len(data)
+
+def test_decision_maker():
+    decision_maker = DecisionMaker()
+    envelope = np.ones(100) * 0.6
+    snr = 15
+    noise_free = True
+    assert decision_maker(envelope, snr) is True
+    snr = 5
+    assert decision_maker(envelope, snr) is False

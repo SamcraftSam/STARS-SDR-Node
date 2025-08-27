@@ -55,9 +55,9 @@ def pipe_detector(data):
 #block until we find NOAA freq
 file.receive_stream(pipe_detector)
 
-shift = abs(file.frequency - detector._best_freq)
+shift = abs(file.frequency - 137630000)#detector._best_freq)
 print(f"Shift is: {shift}")
-pipe_apt = constructor.construct_noaa_apt_decoder(file, decoder, shift)
+pipe_apt = constructor.construct_noaa_apt_decoder(file, decoder, -180000)
 print(f"Type of pipe_apt: {type(pipe_apt)}")
 print(f"Callable: {callable(pipe_apt)}")
 
@@ -70,11 +70,11 @@ print(f"Decoder buffer size: {sum(len(s) for s in decoder._signal)}")
 print("Decoding...")
 data = decoder.decode(outfile="images_local/test_auto.png")
 
-aptcolor.colorize(data=data, outfile="images_local/test_colorized_auto.png", show=False)
+aptcolor.colorize(data=data, outfile="images_local/test_colorized_auto.png", show=True)
 
 
-publisher.connect()
+#publisher.connect()
 
-service.send_image(dummy_image, "NOAA-19", "Berlin, Germany", coordinates=(52.52, 13.40))
+#service.send_image("images_local/test_colorized_auto.png", "NOAA-19", "Berlin, Germany", coordinates=(52.52, 13.40))
 
-publisher.disconnect()
+#publisher.disconnect()

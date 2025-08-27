@@ -1,2 +1,2 @@
-# STAR-SDR-Satellite-Telemetry-Autonomous-Receiver
-Satellite Telemetry Autonomous Receiver, open source utiliy that turns your Raspberrypi and Hackrf into autonomous satellite image sniffer.
+# STARS-Node
+ Satellite Tracking And Receiving System, open source utiliy that turns your Raspberrypi and Hackrf into autonomous satellite image sniffer.

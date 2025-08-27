@@ -1,5 +1,6 @@
 __pycache__/
 dsptools/__pycache__
 apt_tools/__pycache__
+mqtt/received
 sounds/
 images/

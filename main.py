@@ -1,10 +1,10 @@
 import logging
 import numpy as np
 
-from pipelines import *
+from pipelines.pipelines import *
 from apt_tools.apt_colorize import APTColorizer2D
-from file_processor import BasebandFileReader
-from receiver import Receiver
+from input.capture import BasebandFileReader
+from input.receiver import Receiver
 from time import sleep
 
 from pylab import *

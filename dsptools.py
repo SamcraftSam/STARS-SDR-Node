@@ -2,6 +2,9 @@ import numpy as np
 from scipy.signal import *
 from abc import ABC, abstractmethod
 import sounddevice as sd
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 ### ABSTRACT ###
 
@@ -67,7 +70,7 @@ class BytesToComplex(GenericModule):
 
 ### FILTERS ###
 
-class LowPassFilter(GenericModule):
+class LowPassFilterIIR(GenericModule):
     def __init__(self, cutoff_hz, sample_rate_hz, order=5):
         nyq = 0.5 * sample_rate_hz
         norm_cutoff = cutoff_hz / nyq
@@ -75,6 +78,16 @@ class LowPassFilter(GenericModule):
 
     def __call__(self, data):
         return lfilter(self.b, self.a, data)
+
+class BandPassFilterFIR(GenericModule):
+    def __init__(self, low_freq, high_freq, sample_rate, numtaps=128):
+        self.taps = firwin(numtaps,
+                           [low_freq, high_freq],
+                           pass_zero=False,
+                           fs=sample_rate)
+
+    def __call__(self, data):
+        return lfilter(self.taps, 1.0, data)
 
 ### DEMODULATORS ###
 
@@ -91,6 +104,19 @@ class FMQuadratureDemod(GenericModule):
 
 ### MISC ###
 
+class FrequencyShift(GenericModule):
+    def __init__(self, freq_shift_hz, sample_rate):
+        self.freq_shift_hz = freq_shift_hz
+        self.sample_rate = sample_rate
+        self.sample_index = 0
+
+    def __call__(self, data):
+        t = np.arange(len(data)) / self.sample_rate
+        shift = np.exp(-2j * np.pi * self.freq_shift_hz * (self.sample_index + t))
+        self.sample_index += len(data)
+        return data * shift
+
+
 class dBmSignalPower(GenericModule):
     def __init__(self, reference_pwr=-90.0):
         self.ref_p = reference_pwr
@@ -98,11 +124,15 @@ class dBmSignalPower(GenericModule):
     def __call__(self, data):
         strength = np.sum(np.abs(data)**2)/len(data)
         dBm = 10*np.log10(strength) + self.ref_p
-
+        
+        logging.info(f"Signal Pwr: {dBm}")
         return dBm
 
 ### OUTPUT (SINKS) ###
 
+# class StdoutSink(GenericSink):
+#     def __init__(self, string):
+        
 
 class FileSink(GenericSink):
     def __init__(self, path):
@@ -120,8 +150,11 @@ class FileSink(GenericSink):
 class AudioSink(GenericSink):
     def __init__(self, sample_rate):
         self.sample_rate = sample_rate
-
+    
     def __call__(self, data):
         sd.play(data, self.sample_rate)
-
+        sd.wait()
+    
+    def flush(self):
+        pass
 

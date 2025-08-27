@@ -20,18 +20,16 @@ class ImageStorageHandler:
             satellite = payload.get("satellite", "unknown_sat")
             location = payload.get("location", "unknown_loc")
             location = location.replace(",", "").replace(" ", "_")
-
-            # Use timezone-aware UTC timestamp
             timestamp = payload.get("timestamp", datetime.now(timezone.utc).isoformat())
-
-            image_data = payload["image_data"]
             ts = timestamp.replace(":", "-").replace("T", "_").split(".")[0]
-
             filename = f"{satellite}_{location}_{ts}.png"
             filepath = self.save_dir / filename
 
+            image_data = payload["image_data"]
+            decoded = base64.b64decode(image_data)
+
             with open(filepath, "wb") as f:
-                f.write(base64.b64decode(image_data))
+                f.write(decoded)
 
             print(f"[✓] Saved image to {filepath}")
         except Exception as e:

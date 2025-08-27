@@ -12,6 +12,7 @@ from time import sleep
 from pylab import *
 
 
+
 logging.basicConfig(level=logging.INFO)
 
 publisher = MQTTImagePublisher("broker.hivemq.com")

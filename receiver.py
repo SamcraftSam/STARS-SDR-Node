@@ -15,27 +15,45 @@ try:
 except ImportError:
     rtlsdrlib_found = False
 
+# Constants for hardware gain limits
+HACKRF_MAX_LNA_GAIN = 40
+HACKRF_MAX_VGA_GAIN = 62
+
+
 class ReceiverBase(ABC):
-    def receive(self, freq, bw, pipe=None, samples_num=0):
+    def set_frequency(self, freq: int):
         self._set_freq(freq)
-        self._set_sample_rate(bw)
-        logger.info(f"Receiving: {freq / 1e6:.2f} MHz @ {bw / 1e6:.2f} MHz")
-        if samples_num is not None and samples_num > 0:
-            return self._read_samples(samples_num)
-        elif pipe is not None:
+
+    def set_sample_rate(self, rate: int):
+        self._set_sample_rate(rate)
+
+    def receive_samples(self, freq: int, rate: int, samples_num: int):
+        self.set_frequency(freq)
+        self.set_sample_rate(rate)
+        logger.info(f"Receiving {samples_num} samples at {rate/1e6:.2f} MHz from {freq/1e6:.2f} MHz")
+        return self._read_samples(samples_num)
+
+    def receive_stream(self, freq: int, rate: int, pipe):
+        try:
+            self.set_frequency(freq)
+            self.set_sample_rate(rate)
+            logger.info(f"Streaming from {freq/1e6:.2f} MHz at {rate/1e6:.2f} MHz")
             self._start_stream(pipe)
-        else:
-            raise ValueError("Provide samples_num or pipe")
+        except NotImplementedError as e:
+            logger.warning(e)
 
     def stop(self):
-        self._stop_stream()
-        logger.info("RX stopped")
-
-    def set_gain(self, **kwargs):
         try:
-            self._set_gain(**kwargs)
-        except NotImplementedError:
-            logger.warning("Gain control not supported by this device")
+            self._stop_stream()
+            logger.info("RX stopped")
+        except NotImplementedError as e:
+            logger.warning(e)
+
+    def set_gain(self, lna, vga, amp):
+        try:
+            self._set_gain(lna, vga, amp)
+        except NotImplementedError as e:
+            logger.warning(e)
 
     @abstractmethod
     def _set_freq(self, freq): pass
@@ -76,14 +94,15 @@ class HackRFReceiver(ReceiverBase):
         self.sdr.stop_rx()
 
     def _set_gain(self, lna=16, vga=16, amp=False):
-        if lna > 40: logging.warning(f"Maximum LNA is 40, got {lna}")
-        if vga > 62: logging.warning(f"Maximum VGA is 62, got {vga}")
-
-        self.sdr.lna_gain = min(max(0, lna), 40)
-        self.sdr.vga_gain = min(max(0, vga), 62)
+        if lna > HACKRF_MAX_LNA_GAIN:
+            logger.warning(f"LNA gain exceeds max ({HACKRF_MAX_LNA_GAIN}), clipping to max")
+        if vga > HACKRF_MAX_VGA_GAIN:
+            logger.warning(f"VGA gain exceeds max ({HACKRF_MAX_VGA_GAIN}), clipping to max")
+        self.sdr.lna_gain = min(max(0, lna), HACKRF_MAX_LNA_GAIN)
+        self.sdr.vga_gain = min(max(0, vga), HACKRF_MAX_VGA_GAIN)
         self.sdr.amplifier_on = amp
 
-
+# Will not work for now. RTL-SDR will not be supoprted in first release
 class RtlSdrReceiver(ReceiverBase):
     def __init__(self):
         self.sdr = RtlSdr()
@@ -98,18 +117,18 @@ class RtlSdrReceiver(ReceiverBase):
         return self.sdr.read_samples(num)
 
     def _start_stream(self, pipe):
-        raise NotImplementedError(f"Stream RX is not supported by RTL-SDR")
+        raise NotImplementedError("Stream RX is not supported by RTL-SDR")
 
     def _stop_stream(self):
-        raise NotImplementedError(f"Stream RX is not supported by RTL-SDR")
+        raise NotImplementedError("Stream RX is not supported by RTL-SDR")
 
-    def _set_gain(self, lna="auto", **kwargs):
+    def _set_gain(self, lna="auto", **_):
         self.sdr.gain = lna
 
 
 class ReceiverFactory:
     @staticmethod
-    def create(receiver_type="auto"):
+    def create(receiver_type="auto") -> ReceiverBase:
         if receiver_type == "hackrf" and hackrflib_found:
             return HackRFReceiver()
         elif receiver_type == "rtl-sdr" and rtlsdrlib_found:
@@ -123,54 +142,71 @@ class ReceiverFactory:
 
 
 class Receiver:
-    def __init__(self, receiver_type="auto", **kwargs):
+    def __init__(self, 
+                 receiver_type="auto", 
+                 freq=None, bw=None, 
+                 samples_num=0, 
+                 pipe=None, 
+                 amp=False, 
+                 lna=0,
+                 vga=0):
         self.device: ReceiverBase = ReceiverFactory.create(receiver_type)
-        self.config = {
-            "freq": None,
-            "bw": None,
-            "samples_num": 0,
-            "pipe": None
-        }
-        self.config.update(kwargs)
+        self.freq = freq
+        self.bw = bw
+        self.samples_num = samples_num
+        self.pipe = pipe
+        self.amp = amp
+        self.lna = lna
+        self.vga = vga
+
         logger.info(f"Receiver created: {self.device.__class__.__name__}")
-        gain_args = {k: v for k, v in kwargs.items() if k in ('lna', 'vga', 'amp')}
-        if gain_args:
-            self.device.set_gain(**gain_args)
-
-    def configure(self, freq=None, bw=None, samples_num=None, pipe=None):
-        if freq is not None:
-            self.config["freq"] = freq
-        if bw is not None:
-            self.config["bw"] = bw
-        if samples_num is not None:
-            self.config["samples_num"] = samples_num
-        if pipe is not None:
-            self.config["pipe"] = pipe
-
-    def receive_stream(self, pipe=None):
-        if pipe == None:
-            pipe = self.config["pipe"]
         
-        #receive continiously
-        return self.device.receive(
-            self.config["freq"],
-            self.config["bw"],
-            pipe,
-            None
+        self.device.set_gain(self.lna, self.vga, self.amp)
+
+    def set_gain(self, lna=None, vga=None, amp=None):
+        if lna is None:
+            lna = self.lna
+        if vga is None:
+            vga = self.vga
+        if amp is None:
+            amp = self.amp
+
+        self.device.set_gain(lna, vga, amp)
+
+    def set_freq(self, freq: int):
+        if freq is None:
+            raise ValueError("Frequency can't be None!")
+        
+        self.device.set_frequency(freq)
+
+    def set_bandwith(self, bw: int):
+        if bw is None:
+            raise ValueError("Bandwith can't be None!")
+
+        self.device.set_sample_rate(bw)
+
+    def receive_stream(self):
+        if self.freq is None or self.bw is None:
+            raise ValueError("freq and bw must be set before receiving")
+
+        return self.device.receive_stream(
+            freq=self.freq,
+            rate=self.bw,
+            pipe=self.pipe,
         )
     
-    def receive_samples(self, samples_num=None):
-        if samples_num == None:
-            samples_num = self.config["samples_num"]
+    def receive_samples(self, samples_num=0):
+        if self.freq is None or self.bw is None:
+            raise ValueError("freq and bw must be set before receiving")
 
-        #send None as pipe to set receiver into limited mode
-        return self.device.receive(
-            self.config["freq"],
-            self.config["bw"],
-            None,
-            samples_num
+        if samples_num is 0:
+            samples_num = self.samples_num
+
+        return self.device.receive_samples(
+            freq=self.freq,
+            rate=self.bw,
+            samples_num=samples_num
         )
 
     def stop(self):
         self.device.stop()
-

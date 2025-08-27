@@ -45,6 +45,9 @@ This project uses classic OOP principles:
 
 ## 🛠 Development Process
 
+There are no dependencies on the libraries/frameworks for radio like GNURadio etc. 
+All the math was done using common Pyhton tools.
+
 **Languages & Tools:**
 - Python 3
 - NumPy, SciPy, PIL, Matplotlib
@@ -72,7 +75,13 @@ This project uses classic OOP principles:
 - Unit-tested DSP blocks
 - Image colorization with 2D LUT
 
-![NOAA APT Sample](./examples/images/image_great_.png)
+## 📸 Some of my recordings, decoded by this software
+
+![](./examples/images/img_2.png)
+NOAA-15, Baltics and Scandinavia is visible (rotated)
+![](./examples/images/test_colorized.png)
+NOAA-??, bad capture, used for testing
+
 
 ## ✅ Testing
 
@@ -87,14 +96,15 @@ Issues like invalid input types, odd image dimensions, and filter edge cases are
 
 ## 🧾 Conclusion & Future Work
 
-STARS-Node demonstrates how Python and SDR can be combined in a clean, extensible architecture for satellite image decoding.
+Receiving photos from a 40-year-old tin can orbiting 800 km above Earth is fun.
 
 **Future Enhancements:**
 - Add real-time streaming support for live decoding.
 - Implement remote node controls via MQTT.
-- Add peak detection, satellite tracking
+- Add peak detection, satellite tracking.
 - Support other satellite formats (e.g., Meteor-M2, LRPT).
-- Improve Doppler correction in real-time mode.
+- Add Doppler correction in real-time mode.
+- Rewrite in C++ for better perfomance.
 - Add scripts for user-friendly installation.
 
 ---

@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.signal
 from scipy.signal import *
 from abc import ABC, abstractmethod
 import sounddevice as sd
@@ -78,6 +79,15 @@ class LowPassFilterIIR(GenericModule):
 
     def __call__(self, data):
         return lfilter(self.b, self.a, data)
+    
+class LowPassFilterFIR(GenericModule):
+    def __init__(self, cutoff_hz, sample_rate_hz, numtaps=64):
+        nyq = 0.5 * sample_rate_hz
+        norm_cutoff = cutoff_hz / nyq
+        self.taps = firwin(numtaps, norm_cutoff, pass_zero=True)
+
+    def __call__(self, data):
+        return lfilter(self.taps, 1.0, data)
 
 class BandPassFilterFIR(GenericModule):
     def __init__(self, low_freq, high_freq, sample_rate, numtaps=128):
@@ -101,6 +111,37 @@ class FMQuadratureDemod(GenericModule):
         angle[0] = self.prev
         self.prev = angle[-1]
         return angle * self.gain
+
+### DECIMATORS ###
+
+class Decimator(GenericModule):
+    def __init__(self, factor, ftype='fir'):
+        if factor < 1:
+            raise ValueError("Decimation factor must be >= 1")
+        self.factor = factor
+        self.ftype = ftype
+
+    def __call__(self, data):
+        data = scipy.signal.decimate(data, self.factor, ftype=self.ftype)
+        return data
+
+class AutoDecimator(Decimator):
+    def __init__(self, input_rate, target_rate, ftype='fir'):
+        if input_rate <= 0 or target_rate <= 0:
+            raise ValueError("Sample rates must be positive.")
+        if target_rate > input_rate:
+            raise ValueError("Target rate must be less than input rate.")
+
+        self.factor = int(round(input_rate / target_rate))
+        self.actual_rate = input_rate / self.factor
+
+        if not np.isclose(self.actual_rate, target_rate, rtol=0.05):
+            logging.warning(f"Actual decimated rate {self.actual_rate} Hz differs from target {target_rate} Hz.")
+
+        super().__init__(self.factor, ftype)
+
+    def __call__(self, data):
+        return super().__call__(data)
 
 ### MISC ###
 
@@ -128,11 +169,17 @@ class dBmSignalPower(GenericModule):
         logging.info(f"Signal Pwr: {dBm}")
         return dBm
 
-### OUTPUT (SINKS) ###
+### AUDIO ###
 
-# class StdoutSink(GenericSink):
-#     def __init__(self, string):
-        
+class AudioNormalize(GenericModule):
+    def __init__(self):
+        pass
+
+    def __call__(self, data):
+        data /= np.max(np.abs(data))
+        return data
+
+### OUTPUT (SINKS) ###     
 
 class FileSink(GenericSink):
     def __init__(self, path):
@@ -147,14 +194,28 @@ class FileSink(GenericSink):
             for block in self.buffer:
                 f.write(block.tobytes())
 
-class AudioSink(GenericSink):
+class StreamAudioSink(GenericSink):
     def __init__(self, sample_rate):
         self.sample_rate = sample_rate
+        self.stream = sd.OutputStream(samplerate=sample_rate, channels=1)
+        self.stream.start()
+
+    def __call__(self, data):
+        self.stream.write(data.astype(np.float32))
+
+    def flush(self):
+        self.stream.stop()
+        self.stream.close()
+
+class BufferAudioSink(GenericSink):
+    def __init__(self, sample_rate, blocking=False):
+        self.sample_rate = sample_rate
+        self.blocking = blocking
+        self.buffer = []
     
     def __call__(self, data):
-        sd.play(data, self.sample_rate)
-        sd.wait()
-    
+        self.buffer += data
+
     def flush(self):
-        pass
+        sd.play(self.buffer, self.sample_rate, blocking=self.blocking)
 

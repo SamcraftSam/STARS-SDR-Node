@@ -1,113 +1,157 @@
+import logging
 from abc import ABC, abstractmethod
 
 try:
-    from pyhackrf2 import HackRF
+    from hackrf import HackRF
     hackrflib_found = True
-except ImportError as e:
-    print(f"[WARNING] HackRF Library import error: {e}")
+except ImportError:
     hackrflib_found = False
 
 try:
     from rtlsdr import RtlSdr
     rtlsdrlib_found = True
-except ImportError as e:
-    print(f"[WARNING] RTL-SDR Library import error: {e}")
+except ImportError:
     rtlsdrlib_found = False
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
 class ReceiverBase(ABC):
-    @abstractmethod
-    def receive(self, freq, bw, output):
-        pass
-    
-    @abstractmethod
-    def set_gain(self, lna=16, vga=16, amp=False):
-        pass
+    def receive(self, freq, bw, pipe=None, samples_num=0):
+        self._set_freq(freq)
+        self._set_sample_rate(bw)
+        logger.info(f"Receiving: {freq / 1e6:.2f} MHz @ {bw / 1e6:.2f} MHz")
+        if samples_num > 0:
+            return self._read_samples(samples_num)
+        elif pipe is not None:
+            self._start_stream(pipe)
+        else:
+            raise ValueError("Provide samples_num or pipe")
+
+    def stop(self):
+        self._stop_stream()
+        logger.info("RX stopped")
+
+    def set_gain(self, **kwargs):
+        try:
+            self._set_gain(**kwargs)
+        except NotImplementedError:
+            logger.warning("Gain control not supported by this device")
 
     @abstractmethod
-    def stop(self):
-        pass
+    def _set_freq(self, freq): pass
+
+    @abstractmethod
+    def _set_sample_rate(self, rate): pass
+
+    @abstractmethod
+    def _read_samples(self, num): pass
+
+    @abstractmethod
+    def _start_stream(self, pipe): pass
+
+    @abstractmethod
+    def _stop_stream(self): pass
+
+    @abstractmethod
+    def _set_gain(self, **kwargs): pass
+
 
 class HackRFReceiver(ReceiverBase):
     def __init__(self):
-        if not hackrflib_found:
-            raise RuntimeError("HackRF library not found")
         self.sdr = HackRF()
-        print(f"HackRF found, id: {self.sdr.get_serial_no()}")
 
-        self.max_lna = 40
-        self.max_vga = 62
-    
-    # [ DIRECT RADIO CONTROL, ONLY FOR DEBUGGING PURPOSES ]
-    def get_dev_handle(self):
-        return self.sdr
-
-    def __check_gain_limits(self, value, max_val, lable="LNA"):
-        if value < 0:
-            value = 0
-            print(f"{lable} is out of bonds, setting to {value} dB")
-        elif value > max_val:
-            value = max_val
-            print(f"{lable} is out of bonds, setting to {value} dB")
-
-        return value
-        
-    def set_gain(self, lna=16, vga=16, amp=False):
-        self.lna = self.__check_gain_limits(lna, self.max_lna)
-        self.vga = self.__check_gain_limits(vga, self.max_vga, lable="VGA")
-        self.amp = amp
-
-        self.sdr.lna_gain = self.lna
-        self.sdr.vga_gain = self.vga
-        self.sdr.amplifier_on = self.amp
-
-        print(f"HackRF gain parameters updated:\n - LNA: {self.lna}\n - VGA: {self.vga}\n - AMP ON: {self.amp}")
-
-    def receive(self, freq, bw, output):
+    def _set_freq(self, freq):
         self.sdr.center_freq = freq
-        self.sdr.sample_rate = bw
 
-        print(f"Receiving from HackRF at {round((self.sdr.center_freq/1000000), 4)} MHz, BW: {round((self.sdr.sample_rate/1000000), 4)} MHz")
-        
-        self.sdr.start_rx(pipe_function=output)
+    def _set_sample_rate(self, rate):
+        self.sdr.sample_rate = rate
 
-    def stop(self):
-        print(f"RX was manually stopped")
+    def _read_samples(self, num):
+        return self.sdr.read_samples(num)
+
+    def _start_stream(self, pipe):
+        self.sdr.start_rx(pipe_function=pipe)
+
+    def _stop_stream(self):
         self.sdr.stop_rx()
 
-class RTLSdrReceiver(ReceiverBase):
+    def _set_gain(self, lna=16, vga=16, amp=False):
+        self.sdr.lna_gain = min(max(0, lna), 40)
+        self.sdr.vga_gain = min(max(0, vga), 62)
+        self.sdr.amplifier_on = amp
+
+
+class RtlSdrReceiver(ReceiverBase):
     def __init__(self):
-        if not rtlsdrlib_found:
-            raise RuntimeError("RTL-SDR library not found")
         self.sdr = RtlSdr()
-        print("RTL-SDR initialized")
 
-    def receive(self, freq, bw, output):
-        print(f"Receiving from RTL-SDR at {round((freq/1000000), 4)} MHz, BW: {round((bw/1000000), 4)} MHz")
-        #TODO
-    
-    def set_gain(self, lna=0, **kwargs):
-        #TODO
-        pass
+    def _set_freq(self, freq):
+        self.sdr.center_freq = freq
 
-    def stop(self):
-        #TODO
-        pass
+    def _set_sample_rate(self, rate):
+        self.sdr.sample_rate = rate
+
+    def _read_samples(self, num):
+        return self.sdr.read_samples(num)
+
+    def _start_stream(self, pipe):
+        raise NotImplementedError(f"Stream RX is not supported by RTL-SDR")
+
+    def _stop_stream(self):
+        raise NotImplementedError(f"Stream RX is not supported by RTL-SDR")
+
+    def _set_gain(self, lna="auto", **kwargs):
+        self.sdr.gain = lna
+
 
 class ReceiverFactory:
     @staticmethod
     def create(receiver_type="auto"):
-        if receiver_type == "auto":
+        if receiver_type == "hackrf" and hackrflib_found:
+            return HackRFReceiver()
+        elif receiver_type == "rtl-sdr" and rtlsdrlib_found:
+            return RtlSdrReceiver()
+        elif receiver_type == "auto":
             if hackrflib_found:
                 return HackRFReceiver()
             elif rtlsdrlib_found:
-                return RTLSdrReceiver()
-            else:
-                raise RuntimeError("No SDR device found")
-        elif receiver_type == "hackrf":
-            return HackRFReceiver()
-        elif receiver_type == "rtl-sdr":
-            return RTLSdrReceiver()
-        else:
-            raise ValueError(f"Unknown receiver type: {receiver_type}")
+                return RtlSdrReceiver()
+        raise RuntimeError("No compatible SDR device found")
 
+
+class Receiver:
+    def __init__(self, receiver_type="auto", **kwargs):
+        self.device: ReceiverBase = ReceiverFactory.create(receiver_type)
+        self.config = {
+            "freq": None,
+            "bw": None,
+            "samples_num": 0,
+            "pipe": None
+        }
+        self.config.update(kwargs)
+        logger.info(f"Receiver created: {self.device.__class__.__name__}")
+        gain_args = {k: v for k, v in kwargs.items() if k in ('lna', 'vga', 'amp')}
+        if gain_args:
+            self.device.set_gain(**gain_args)
+
+    def configure(self, freq=None, bw=None, samples_num=0, pipe=None):
+        if freq is not None:
+            self.config["freq"] = freq
+        if bw is not None:
+            self.config["bw"] = bw
+        self.config["samples_num"] = samples_num
+        self.config["pipe"] = pipe
+
+    def receive(self):
+        return self.device.receive(
+            self.config["freq"],
+            self.config["bw"],
+            self.config["pipe"],
+            self.config["samples_num"]
+        )
+
+    def stop(self):
+        self.device.stop()
 

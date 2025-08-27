@@ -1,10 +1,12 @@
 import receiver
-from receiver import *
+from receiver import Receiver
 import numpy as np
 import math
 from time import sleep
 
 from pylab import *
+
+# TEST CODE 
 
 def pipe(data: bytes) -> bool:
     a = np.array(data).astype(np.int8).astype(np.float64).view(np.complex128)
@@ -13,18 +15,28 @@ def pipe(data: bytes) -> bool:
     print(f"dBFS: { dbfs }")
     return False    # pipe function may return True to stop rx immediately
 
+receiver = Receiver(
+    receiver_type="rtl-sdr",   # "hackrf" / "rtl-sdr" / "auto"
+    lna=20,                 # Only for HackRF
+    vga=30,
+    amp=True
+)
 
-receiver = ReceiverFactory.create()
-receiver.set_gain(20, 41, True)
-receiver.receive(100e6, 2e6, pipe)
-sleep(1)
-receiver.stop()
+receiver.configure(
+    freq=98.5e6,            # 98.5 MHz
+    bw=2e6,                 # 2 MHz bandwidth
+    samples_num=2048       # or use pipe=process_samples
+)
 
-sdr = receiver.get_dev_handle()
 
-samples = sdr.read_samples(2e6)
+receiver.configure(pipe=pipe)
+receiver.receive()
+time.sleep(1)
+recevier.stop()
 
-psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
+samples = receiver.receive()
+
+psd(samples, NFFT=1024, Fs=2e6/1e6, Fc=98.5e6/1e6)
 xlabel('Frequency (MHz)')
 ylabel('Relative power (dB)')
 show()

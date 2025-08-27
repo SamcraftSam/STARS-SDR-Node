@@ -1,4 +1,3 @@
-import receiver
 import logging
 import numpy as np
 

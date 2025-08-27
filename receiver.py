@@ -147,20 +147,28 @@ class Receiver:
         if pipe is not None:
             self.config["pipe"] = pipe
 
-    def receive_stream(self):
+    def receive_stream(self, pipe=None):
+        if pipe == None:
+            pipe = self.config["pipe"]
+        
+        #receive continiously
         return self.device.receive(
             self.config["freq"],
             self.config["bw"],
-            self.config["pipe"],
+            pipe,
             None
         )
     
-    def receive_samples(self):
+    def receive_samples(self, samples_num=None):
+        if samples_num == None:
+            samples_num = self.config["samples_num"]
+
+        #send None as pipe to set receiver into limited mode
         return self.device.receive(
             self.config["freq"],
             self.config["bw"],
             None,
-            self.config["samples_num"]
+            samples_num
         )
 
     def stop(self):

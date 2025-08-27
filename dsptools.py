@@ -4,6 +4,7 @@ from scipy.signal import *
 from abc import ABC, abstractmethod
 import sounddevice as sd
 import logging
+import wave
 
 logging.basicConfig(level=logging.INFO)
 
@@ -41,7 +42,7 @@ class WavToComplex(GenericModule):
         if self.normalize:
             if np.issubdtype(data.dtype, np.integer):
                 max_val = np.iinfo(data.dtype).max
-                iq = iq / max_val
+                self.iq = self.iq / max_val
             elif np.issubdtype(data.dtype, np.floating):
                 pass
             else:
@@ -194,8 +195,27 @@ class FileSink(GenericSink):
             for block in self.buffer:
                 f.write(block.tobytes())
 
+class FileAudioSink(GenericSink):
+    def __init__(self, filename, sample_rate=48000):
+        self.filename = filename
+        self.sample_rate = sample_rate
+        self.buffer = []
+
+    def __call__(self, data):
+        self.buffer.append(data)
+
+    def flush(self):
+        full = np.concatenate(self.buffer)
+        full = (full / np.max(np.abs(full)) * 32767).astype(np.int16)
+
+        with wave.open(self.filename, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(self.sample_rate)
+            wf.writeframes(full.tobytes())
+
 class StreamAudioSink(GenericSink):
-    def __init__(self, sample_rate):
+    def __init__(self, sample_rate=48000):
         self.sample_rate = sample_rate
         self.stream = sd.OutputStream(samplerate=sample_rate, channels=1)
         self.stream.start()
@@ -208,14 +228,14 @@ class StreamAudioSink(GenericSink):
         self.stream.close()
 
 class BufferAudioSink(GenericSink):
-    def __init__(self, sample_rate, blocking=False):
+    def __init__(self, sample_rate=48000):
         self.sample_rate = sample_rate
-        self.blocking = blocking
         self.buffer = []
-    
+
     def __call__(self, data):
-        self.buffer += data
+        self.buffer.append(data)
 
     def flush(self):
-        sd.play(self.buffer, self.sample_rate, blocking=self.blocking)
-
+        all_data = np.concatenate(self.buffer)
+        sd.play(all_data, self.sample_rate)
+        sd.wait()
